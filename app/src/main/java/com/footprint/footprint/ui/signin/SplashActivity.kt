@@ -14,13 +14,20 @@ import com.footprint.footprint.utils.LogUtils
 import com.footprint.footprint.utils.getJwt
 import com.footprint.footprint.utils.getOnboarding
 import com.footprint.footprint.utils.removeJwt
+import com.google.android.material.snackbar.Snackbar
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.play.core.install.model.UpdateAvailability
 import com.google.gson.Gson
 
 
 class SplashActivity : BaseActivity<ActivitySplashBinding>(ActivitySplashBinding::inflate),
     SplashView, MonthBadgeView {
+    private val APP_UPDATE_REQUEST_CODE = 100
 
     override fun initAfterBinding() {
+        checkAppUpdate()
+
         //온보딩 화면 O/X => 1.5
         val handler = Handler()
         handler.postDelayed({
@@ -33,6 +40,39 @@ class SplashActivity : BaseActivity<ActivitySplashBinding>(ActivitySplashBinding
                 autoLogin()
             }
         }, 1500)
+    }
+
+    private fun checkAppUpdate() {
+        val appUpdateManager = AppUpdateManagerFactory.create(this)
+
+        val appUpdateInfoTask = appUpdateManager.appUpdateInfo
+
+        appUpdateInfoTask.addOnSuccessListener { appUpdateInfo ->
+            if (appUpdateInfo.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                && appUpdateInfo.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)
+            ) {
+                // Request the update.
+                appUpdateManager.startUpdateFlowForResult(
+                    appUpdateInfo,
+                    AppUpdateType.IMMEDIATE,
+                    this,
+                    APP_UPDATE_REQUEST_CODE
+                )
+            } else {
+                LogUtils.d("Splash/Update", "업데이트 없음")
+
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == APP_UPDATE_REQUEST_CODE) {
+            if (resultCode != RESULT_OK) {
+                Snackbar.make(binding.root, "업데이트가 실패했습니다.", Snackbar.LENGTH_LONG)
+                finishAffinity()
+            }
+        }
     }
 
 
@@ -68,7 +108,7 @@ class SplashActivity : BaseActivity<ActivitySplashBinding>(ActivitySplashBinding
 
     override fun onAutoLoginFailure(code: Int, message: String) {
         LogUtils.d("SPLASH/API-FAILURE", "code: $code message: $message")
-        when(code){
+        when (code) {
             2001, 2002, 2003, 2004 -> { // JWT 관련 오류 -> 로그인 액티비티,
                 removeJwt()
                 startSignInActivity()
