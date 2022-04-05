@@ -2,14 +2,14 @@ package com.footprint.footprint.ui.dialog
 
 import android.Manifest
 import android.graphics.Bitmap
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.view.*
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -21,8 +21,6 @@ import com.footprint.footprint.R
 import com.footprint.footprint.databinding.FragmentFootprintDialogBinding
 import com.footprint.footprint.ui.adapter.PhotoRVAdapter
 import com.footprint.footprint.ui.walk.model.FootprintUIModel
-import com.footprint.footprint.utils.DialogFragmentUtils
-import com.footprint.footprint.utils.LogUtils
 import com.footprint.footprint.utils.getAbsolutePathByBitmap
 import com.footprint.footprint.utils.uriToBitmap
 import com.google.gson.Gson
@@ -35,6 +33,7 @@ import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
+
 
 class FootprintDialogFragment() : DialogFragment(), TextWatcher {
     private lateinit var binding: FragmentFootprintDialogBinding
@@ -63,15 +62,17 @@ class FootprintDialogFragment() : DialogFragment(), TextWatcher {
         fun cancel()
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setStyle(STYLE_NO_TITLE, R.style.dialog_fullscreen)
+        isCancelable = true
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
         binding = FragmentFootprintDialogBinding.inflate(inflater, container, false)
-
-        //다이얼로그 프래그먼트 모서리 둥글게
-        dialog?.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        dialog?.window?.requestFeature(Window.FEATURE_NO_TITLE)
 
         setHashTag()    //해시태그 관련 설정(TextMatcher)
         initAdapter()   //뷰페이저 어댑터 설정
@@ -85,18 +86,6 @@ class FootprintDialogFragment() : DialogFragment(), TextWatcher {
         }
 
         return binding.root
-    }
-
-    override fun onResume() {
-        super.onResume()
-
-        //전체 프래그먼트 크기 설정
-        DialogFragmentUtils.dialogFragmentResize(
-            requireContext(),
-            this@FootprintDialogFragment,
-            0.9f,
-            0.64f
-        )
     }
 
     //다이얼로그가 종료되면 WalkMapFragment 에서 타이머를 재시작 할 수 있도록 cancel 콜백 함수 실행
@@ -290,6 +279,10 @@ class FootprintDialogFragment() : DialogFragment(), TextWatcher {
                 else    //발자국 추가일 때
                     myDialogCallback.sendFootprint(setFootprintData())
             }
+        }
+
+        binding.postDialogContentEt.setOnFocusChangeListener { p0, p1 ->
+            binding.testView.visibility = View.VISIBLE
         }
     }
 

@@ -13,6 +13,7 @@ import android.text.style.ForegroundColorSpan
 import android.view.View
 import androidx.annotation.UiThread
 import androidx.core.content.ContextCompat.getColor
+import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
@@ -467,6 +468,7 @@ class WalkMapFragment : BaseFragment<FragmentWalkmapBinding>(FragmentWalkmapBind
 
     private fun initFootprintDialog() {
         footprintDialogFragment = FootprintDialogFragment()
+        footprintDialogFragment.setStyle(DialogFragment.STYLE_NO_TITLE, android.R.style.Theme_NoTitleBar_Fullscreen)
 
         footprintDialogFragment.setMyDialogCallback(object :
             FootprintDialogFragment.MyDialogCallback {

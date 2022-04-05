@@ -114,4 +114,11 @@
         <item name="android:textColor">@color/primary</item>
         <item name="android:textAppearance">@style/tv_subtitle_b_16</item>
     </style>
+
+    <style name="dialog_fullscreen" parent="Theme.AppCompat.Dialog">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
 </resources>
