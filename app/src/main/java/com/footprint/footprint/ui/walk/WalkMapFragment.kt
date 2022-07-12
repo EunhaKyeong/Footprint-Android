@@ -27,6 +27,7 @@ import com.footprint.footprint.ui.BaseFragment
 import com.footprint.footprint.ui.dialog.ActionDialogFragment
 import com.footprint.footprint.ui.dialog.FootprintDialogFragment
 import com.footprint.footprint.utils.getAbsolutePathByBitmap
+import com.footprint.footprint.utils.setTempWalk
 import com.google.android.material.snackbar.Snackbar
 import com.google.gson.Gson
 import com.naver.maps.geometry.LatLng
@@ -62,6 +63,16 @@ class WalkMapFragment : BaseFragment<FragmentWalkmapBinding>(FragmentWalkmapBind
     private val saveWalkFootprints: ArrayList<SaveWalkFootprintEntity> = arrayListOf() //지금까지 사용자가 기록한 총 데이터
     private val saveWalkEntity: SaveWalkEntity = SaveWalkEntity()  //산책 데이터
     private lateinit var userInfo: SimpleUserModel
+
+    //산책 기록 임시저장 Job
+    private val tempSaveWalkJob = CoroutineScope(Dispatchers.IO).launch (start = CoroutineStart.LAZY) {
+        while(true) {
+            bindSaveWalkEntity()
+            setTempWalk(Gson().toJson(saveWalkEntity))
+
+            delay(5000)
+        }
+    }
 
     override fun initAfterBinding() {
         if (::map.isInitialized) {
@@ -240,6 +251,8 @@ class WalkMapFragment : BaseFragment<FragmentWalkmapBinding>(FragmentWalkmapBind
         binding.walkmapStopIv.setOnClickListener {
             showStopWalkDialog()    //실시간 기록을 중지할까요? 다이얼로그 화면 띄우기
         }
+
+        tempSaveWalkJob.start() //산책 기록 임시 저장 Job START
     }
 
     private fun putMarker(locationPosition: LatLng, image: OverlayImage) {
@@ -502,6 +515,8 @@ class WalkMapFragment : BaseFragment<FragmentWalkmapBinding>(FragmentWalkmapBind
 
     override fun onDestroyView() {
         super.onDestroyView()
+
         sendCommandToService(BackgroundWalkService.TRACKING_STOP)
+        tempSaveWalkJob.cancel()    //산책 기록 임시 저장 종료
     }
 }

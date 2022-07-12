@@ -185,6 +185,22 @@ fun removeReadNoticeList(){
     editor.apply()
 }
 
+fun setTempWalk(walk: String) {
+    val editor = mSharedPreferences.edit()
+
+    editor.putString("tempWalk", walk)
+    editor.apply()
+}
+
+fun getTempWalk(): String? =  mSharedPreferences.getString("tempWalk", null)
+
+fun removeTempWalk(){
+    val editor = mSharedPreferences.edit()
+
+    editor.remove("tempWalk")
+    editor.apply()
+}
+
 private fun convertString2IntArrayList(list: String): ArrayList<Int>{
     val type = object : TypeToken<ArrayList<Int>?>() {}.type
     return Gson().fromJson(list, type)

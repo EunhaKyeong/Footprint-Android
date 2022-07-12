@@ -174,15 +174,26 @@ class WalkAfterActivity :
 
             //‘OO번째 산책’ 작성을 취소할까요?
             override fun action1(isAction: Boolean) {
-                if (isAction)   //삭제 버튼 누르면 액티비티 종료
+                if (isAction) {   //삭제 버튼 누르면 액티비티 종료
+                    removeTempWalk()    //산책 임시저장 데이터 삭제
                     finish()
+                }
             }
 
             //‘OO번째 산책’을 저장할까요?
             override fun action2(isAction: Boolean) {
                 if (isAction && isNetworkAvailable(applicationContext)) {   //저장 버튼 누르면 산책 정보 저장 API 호출
                     binding.walkAfterLoadingPb.visibility = View.VISIBLE    //로딩바 띄우기
-                    uploadWalkImg(File(saveWalkEntity.pathImg))    //산책 이미지를 S3에 저장
+
+                    if (saveWalkEntity.pathImg.isBlank()) { //임시 저장 산책 데이터 저장할 때
+                        saveWalkEntity.pathImg = "https://mystepsbucket.s3.ap-northeast-2.amazonaws.com/8193cc05-4aa7-322e-9a82-67b3f605ee3d.jpg"
+
+                        if (saveWalkEntity.saveWalkFootprints.isNotEmpty())
+                            uploadFootprintPhotos(0, 0)
+                        else
+                            saveWalk()
+                    } else  //그냥 산책 데이터 저장할 때
+                        uploadWalkImg(File(saveWalkEntity.pathImg))    //산책 이미지를 S3에 저장
                 } else if (isAction && !isNetworkAvailable(applicationContext)) {    //저장을 눌렀는데 네트워크 연결이 안 돼 있는 경우
                     networkErrSb = Snackbar.make(binding.root, getString(R.string.error_network), Snackbar.LENGTH_INDEFINITE)
                     networkErrSb.show()
@@ -359,6 +370,7 @@ class WalkAfterActivity :
         })
 
         walkVm.badges.observe(this, Observer {
+            removeTempWalk()    //임시 저장해 놨던 산책 기록 데이터 삭제
             binding.walkAfterLoadingPb.visibility = View.INVISIBLE
 
             if (it.isEmpty()) {  //얻은 뱃지가 없을 때
