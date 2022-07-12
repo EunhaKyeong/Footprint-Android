@@ -46,9 +46,11 @@ class HomeDayFragment() : BaseFragment<FragmentHomeDayBinding>(FragmentHomeDayBi
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
 
-        // onPause 시 날라가는 데이터 임시 저장
-        val jsonToday = Gson().toJson(today)
-        outState.putString("TODAY", jsonToday)
+        if (::today.isInitialized) {
+            // onPause 시 날라가는 데이터 임시 저장
+            val jsonToday = Gson().toJson(today)
+            outState.putString("TODAY", jsonToday)
+        }
     }
 
     /*Observe & Bind*/
