@@ -26,6 +26,7 @@ import com.footprint.footprint.data.dto.Today
 import com.footprint.footprint.databinding.FragmentHomeBinding
 import com.footprint.footprint.ui.BaseFragment
 import com.footprint.footprint.ui.adapter.HomeViewpagerAdapter
+import com.footprint.footprint.ui.dialog.TempWalkDialogFragment
 import com.footprint.footprint.ui.walk.WalkActivity
 import com.footprint.footprint.ui.walk.WalkAfterActivity
 import com.footprint.footprint.utils.*
@@ -133,18 +134,6 @@ class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::in
         homeVm.getUser()
         homeVm.getToday()
         homeVm.getTmonth()
-    }
-
-    override fun onResume() {
-        super.onResume()
-
-        //임시 저장된 산책 정보가 있으면 WalkAfterActivity 로 이동.
-        val tempWalk: String? = getTempWalk()
-        if (tempWalk != null) {
-            val walkAfterIntent = Intent(requireContext(), WalkAfterActivity::class.java)
-            walkAfterIntent.putExtra("walk", tempWalk)    //산책 정보 전달
-            startActivity(walkAfterIntent)
-        }
     }
 
     private fun setClickListener() {

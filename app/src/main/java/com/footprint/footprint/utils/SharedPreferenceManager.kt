@@ -154,6 +154,7 @@ fun reset(){
     removePWD()
     removeJwt()
     removeNotification()
+    removeTempWalk()
 }
 
 /* 주요 공지 */
