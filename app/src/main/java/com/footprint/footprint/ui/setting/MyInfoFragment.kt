@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import androidx.core.content.ContextCompat
 import androidx.core.view.updateLayoutParams
+import androidx.lifecycle.Observer
 import androidx.navigation.fragment.findNavController
 import com.footprint.footprint.R
 import com.footprint.footprint.domain.model.MyInfoUserModel
@@ -21,10 +22,11 @@ import org.koin.androidx.viewmodel.ext.android.sharedViewModel
 import kotlin.math.floor
 
 class MyInfoFragment : BaseFragment<FragmentMyInfoBinding>(FragmentMyInfoBinding::inflate){
-
     private lateinit var rgPositionListener : ViewTreeObserver.OnGlobalLayoutListener
 
     private val myInfoVm: MyInfoViewModel by sharedViewModel()
+    private lateinit var networkErrSb: Snackbar
+
     private lateinit var user: MyInfoUserModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,16 +42,15 @@ class MyInfoFragment : BaseFragment<FragmentMyInfoBinding>(FragmentMyInfoBinding
         }
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun initAfterBinding() {
+        requireView().viewTreeObserver.addOnGlobalLayoutListener(rgPositionListener)
+
+        observe()
+        setMyEventListener()
+        setHelpBalloon()
 
         //유저 정보 조회 API 호출
         myInfoVm.getMyInfoUser()
-        observe()
-    }
-
-    override fun initAfterBinding() {
-        requireView().viewTreeObserver.addOnGlobalLayoutListener(rgPositionListener)
     }
 
     //내 정보 "조회" 화면
@@ -216,12 +217,13 @@ class MyInfoFragment : BaseFragment<FragmentMyInfoBinding>(FragmentMyInfoBinding
     private fun observe(){
         myInfoVm.mutableErrorType.observe(viewLifecycleOwner, androidx.lifecycle.Observer {
             when (it) {
-                ErrorType.NETWORK -> Snackbar.make(requireView(), getString(R.string.error_network), Snackbar.LENGTH_INDEFINITE).setAction(R.string.action_retry) {
-                    myInfoVm.getMyInfoUser()
-                }.show()
-                else -> Snackbar.make(requireView(), getString(R.string.error_api_fail), Snackbar.LENGTH_INDEFINITE).setAction(R.string.action_retry) {
-                    myInfoVm.getMyInfoUser()
-                }.show()
+                ErrorType.NETWORK -> {
+                    networkErrSb = Snackbar.make(requireView(), getString(R.string.error_network), Snackbar.LENGTH_INDEFINITE).setAction(R.string.action_retry) { myInfoVm.getMyInfoUser() }
+                    networkErrSb.show()
+                }
+                ErrorType.UNKNOWN, ErrorType.DB_SERVER -> {
+                    startErrorActivity("MyInfoFragment")
+                }
             }
         })
 
@@ -231,8 +233,20 @@ class MyInfoFragment : BaseFragment<FragmentMyInfoBinding>(FragmentMyInfoBinding
             binding.myInfoDayLoadingBgV.visibility = View.GONE
             binding.myInfoDayLoadingPb.visibility = View.GONE
             setLookUI(this.user) //내 정보 조회 화면 데이터 바인딩
-            setMyEventListener()
-            setHelpBalloon()    //툴팁
         })
+
+        myInfoVm.isUpdate.observe(viewLifecycleOwner, Observer { isUpdate ->
+            if(isUpdate){
+                myInfoVm.getMyInfoUser()
+            }
+        })
+    }
+
+
+    override fun onStop() {
+        super.onStop()
+
+        if (::networkErrSb.isInitialized && networkErrSb.isShown)
+            networkErrSb.dismiss()
     }
 }

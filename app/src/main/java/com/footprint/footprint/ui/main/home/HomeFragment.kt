@@ -1,28 +1,35 @@
 package com.footprint.footprint.ui.main.home
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.location.Location
+import android.location.LocationManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Looper
 import android.view.View
 import android.widget.Toast
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.footprint.footprint.R
-import com.footprint.footprint.data.dto.Weather
+import com.footprint.footprint.data.dto.*
 import com.footprint.footprint.domain.model.LocationModel
 import com.footprint.footprint.domain.model.SimpleUserModel
-import com.footprint.footprint.data.dto.TMonth
-import com.footprint.footprint.data.dto.Today
 import com.footprint.footprint.databinding.FragmentHomeBinding
 import com.footprint.footprint.ui.BaseFragment
 import com.footprint.footprint.ui.adapter.HomeViewpagerAdapter
+import com.footprint.footprint.ui.error.ErrorActivity
 import com.footprint.footprint.ui.walk.WalkActivity
 import com.footprint.footprint.utils.*
 import com.footprint.footprint.viewmodel.HomeViewModel
@@ -37,6 +44,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::inflate){
+    private lateinit var networkErrSb: Snackbar
+    private lateinit var getResult: ActivityResultLauncher<Intent>
 
     //뷰페이저, 프래그먼트
     private lateinit var homeVPAdapter: HomeViewpagerAdapter
@@ -47,9 +56,9 @@ class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::in
     //뷰모델
     private val homeVm: HomeViewModel by sharedViewModel()
     private lateinit var user: SimpleUserModel
-    private lateinit var weather: Weather
-    private lateinit var today: Today
-    private lateinit var tmonth: TMonth
+    private lateinit var weather: WeatherDTO
+    private lateinit var today: TodayDTO
+    private lateinit var tmonth: TMonthDTO
 
     private val gpsBackgroundPermissionListener = object : PermissionListener {
         override fun onPermissionGranted() {
@@ -65,6 +74,7 @@ class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::in
     }
 
     override fun initAfterBinding() {
+
         val gpsMessage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             getString(R.string.msg_foreground_gps)
         } else {
@@ -117,18 +127,6 @@ class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::in
 
         setClickListener()
         observe()
-    }
-
-    override fun onStart() {
-        super.onStart()
-        /* API 에러 */
-        //날씨 API
-        //callWeatherAPI() // method is not allowed
-
-        //유저 정보, 일별, 월별 API
-        homeVm.getUser()
-        homeVm.getToday()
-        homeVm.getTmonth()
     }
 
     private fun setClickListener() {
@@ -227,6 +225,27 @@ class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::in
         )
     }
 
+    private fun initActivityResult(){
+        getResult = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result: ActivityResult ->
+            when(result.resultCode){
+                Activity.RESULT_CANCELED, ErrorActivity.BACK, ErrorActivity.CONTACT -> {
+
+                    // 사용자 정보 조회 API에 문제 생긴 경우, 앱 종료
+                    if(homeVm.getErrorType() == "getUser"){
+                        if(activity != null)
+                            requireActivity().finishAffinity()
+                    }
+
+                    // today, tmonth 정보 없으면 로딩바
+                    if(!::today.isInitialized && !::tmonth.isInitialized)
+                        showLoadingBar(true)
+                }
+            }
+        }
+    }
+
     //위치 정보 권한 허용 함수(포그라운드)
     private fun setPermission() {
         val gpsForegroundPermissionListener = object : PermissionListener {
@@ -274,7 +293,7 @@ class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::in
             val locationRequest = LocationRequest.create()
             locationRequest.run {
                 priority = LocationRequest.PRIORITY_HIGH_ACCURACY
-                interval = 60 * 60 * 60 //1시간마다 위치 불러옴
+                interval = 60 * 1000
             }
             val locationCallback = object : LocationCallback() {
                 override fun onLocationResult(p0: LocationResult) {
@@ -285,9 +304,9 @@ class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::in
                             //날씨 api 호출
                             val location = LocationModel(location.latitude.toInt().toString(), location.longitude.toInt().toString())
                             homeVm.getWeather(location)
+                            locationClient.removeLocationUpdates(this)
                         }
                     }
-
                 }
             }
 
@@ -318,16 +337,20 @@ class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::in
     private fun observe(){
         homeVm.mutableErrorType.observe(viewLifecycleOwner, androidx.lifecycle.Observer {
             when (it) {
-                ErrorType.NETWORK -> Snackbar.make(requireView(), getString(R.string.error_network), Snackbar.LENGTH_INDEFINITE).setAction(R.string.action_retry) {
-                    homeVm.getUser()
-                    homeVm.getToday()
-                    homeVm.getTmonth()
-                }.show()
-                else -> Snackbar.make(requireView(), getString(R.string.error_api_fail), Snackbar.LENGTH_INDEFINITE).setAction(R.string.action_retry) {
-                    homeVm.getUser()
-                    homeVm.getToday()
-                    homeVm.getTmonth()
-                }.show()
+                ErrorType.NETWORK -> {
+                    networkErrSb = Snackbar.make(requireView(), getString(R.string.error_network), Snackbar.LENGTH_INDEFINITE)
+
+                    when(homeVm.getErrorType()){
+                        "getUser" -> networkErrSb.setAction(getString(R.string.action_retry)) { homeVm.getUser() }
+                        "getToday" -> networkErrSb.setAction(getString(R.string.action_retry)) { homeVm.getToday() }
+                        "getTmonth" -> networkErrSb.setAction(getString(R.string.action_retry)) { homeVm.getUser() }
+                        "getWeather" -> networkErrSb.setAction(getString(R.string.action_retry)) { callWeatherAPI() }
+                    }
+                    networkErrSb.show()
+                }
+                ErrorType.UNKNOWN, ErrorType.DB_SERVER -> {
+                    startErrorActivity(getResult, "HomeFragment")
+                }
             }
         })
 
@@ -345,11 +368,15 @@ class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::in
         homeVm.thisToday.observe(viewLifecycleOwner, androidx.lifecycle.Observer {
             this@HomeFragment.today = it
             bind()
+
+            showLoadingBar(false)
         })
 
         homeVm.thisTmonth.observe(viewLifecycleOwner, androidx.lifecycle.Observer {
             this@HomeFragment.tmonth = it
             bind()
+
+            showLoadingBar(false)
         })
     }
 
@@ -410,6 +437,36 @@ class HomeFragment() : BaseFragment<FragmentHomeBinding>(FragmentHomeBinding::in
                 else -> R.drawable.ic_weather_sunny
             }
             binding.homeTopWeatherIv.setImageResource(imgRes)
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        initActivityResult()
+    }
+    override fun onResume() {
+        super.onResume()
+            callWeatherAPI()
+            homeVm.getUser()
+            homeVm.getToday()
+            homeVm.getTmonth()
+    }
+    override fun onStop() {
+        super.onStop()
+
+        if (::networkErrSb.isInitialized && networkErrSb.isShown)
+            networkErrSb.dismiss()
+    }
+
+    // 로딩바
+    private fun showLoadingBar(show: Boolean){
+        if(show){
+            binding.homeLoadingBgV.visibility = View.VISIBLE
+            binding.homeLoadingPb.visibility = View.VISIBLE
+        }else{
+            binding.homeLoadingBgV.visibility = View.GONE
+            binding.homeLoadingPb.visibility = View.GONE
         }
     }
 }

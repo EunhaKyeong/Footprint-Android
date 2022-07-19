@@ -1,5 +1,6 @@
 package com.footprint.footprint.ui.setting
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
@@ -9,12 +10,17 @@ import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.updateLayoutParams
+import androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE
 import androidx.navigation.fragment.navArgs
 import com.footprint.footprint.R
 import com.footprint.footprint.databinding.FragmentMyInfoUpdateBinding
 import com.footprint.footprint.domain.model.MyInfoUserModel
 import com.footprint.footprint.ui.BaseFragment
+import com.footprint.footprint.ui.error.ErrorActivity
 import com.footprint.footprint.utils.ErrorType
 import com.footprint.footprint.utils.LogUtils
 import com.footprint.footprint.utils.convertDpToSp
@@ -30,6 +36,8 @@ class MyInfoUpdateFragment :
     BaseFragment<FragmentMyInfoUpdateBinding>(FragmentMyInfoUpdateBinding::inflate){
 
     private val myInfoVm: MyInfoViewModel by sharedViewModel()
+    private lateinit var networkErrSb: Snackbar
+
     private lateinit var user: MyInfoUserModel
 
     private val args: MyInfoUpdateFragmentArgs by navArgs()
@@ -275,8 +283,8 @@ class MyInfoUpdateFragment :
         }
 
         if (binding.myInfoUpdateBirthYearEt.text.isNotBlank())    //생년월일
-            user.birth =
-                "${binding.myInfoUpdateBirthYearEt.text}-${binding.myInfoUpdateBirthMonthEt.text}-${binding.myInfoUpdateBirthDayEt.text}"
+            user.birth = String.format("%04d-%02d-%02d",
+                binding.myInfoUpdateBirthYearEt.text.toString().toInt(), binding.myInfoUpdateBirthMonthEt.text.toString().toInt(), binding.myInfoUpdateBirthDayEt.text.toString().toInt())
         else
             user.birth = "1900-01-01"
 
@@ -323,14 +331,17 @@ class MyInfoUpdateFragment :
     private fun observe() {
         myInfoVm.mutableErrorType.observe(viewLifecycleOwner, androidx.lifecycle.Observer {
             when (it) {
-                ErrorType.NETWORK -> Snackbar.make(requireView(), getString(R.string.error_network), Snackbar.LENGTH_INDEFINITE).setAction(R.string.action_retry) {
-                    if (validate())
-                        myInfoVm.updateUser(bindUser())
-                }.show()
-                else -> Snackbar.make(requireView(), getString(R.string.error_api_fail), Snackbar.LENGTH_INDEFINITE).setAction(R.string.action_retry) {
-                    if (validate())
-                        myInfoVm.updateUser(bindUser())
-                }.show()
+                ErrorType.NETWORK ->{
+                    networkErrSb = Snackbar.make(requireView(), getString(R.string.error_network), Snackbar.LENGTH_INDEFINITE).setAction(R.string.action_retry) {
+                        if (validate())
+                            myInfoVm.updateUser(bindUser())
+                    }
+
+                    networkErrSb.show()
+                }
+                ErrorType.UNKNOWN, ErrorType.DB_SERVER -> {
+                    startErrorActivity("MyInfoUpdateFragment")
+                }
             }
         })
 
@@ -338,6 +349,12 @@ class MyInfoUpdateFragment :
             if (it)
                (requireActivity()).onBackPressed()
         })
+    }
 
+    override fun onStop() {
+        super.onStop()
+
+        if (::networkErrSb.isInitialized && networkErrSb.isShown)
+            networkErrSb.dismiss()
     }
 }

@@ -4,12 +4,17 @@ import android.content.Intent
 import android.graphics.Paint
 import android.os.Bundle
 import android.view.View
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.Observer
 import androidx.navigation.fragment.findNavController
+import com.footprint.footprint.BuildConfig
 import com.footprint.footprint.R
 import com.footprint.footprint.databinding.FragmentSettingBinding
 import com.footprint.footprint.ui.BaseFragment
 import com.footprint.footprint.ui.dialog.ActionDialogFragment
+import com.footprint.footprint.ui.error.ErrorActivity
 import com.footprint.footprint.ui.signin.SplashActivity
 import com.footprint.footprint.utils.*
 import com.footprint.footprint.viewmodel.SettingViewModel
@@ -27,11 +32,15 @@ class SettingFragment : BaseFragment<FragmentSettingBinding>(FragmentSettingBind
     private lateinit var mGoogleSignInClient: GoogleSignInClient
 
     private lateinit var loginStatus: String
+
     private val settingVm: SettingViewModel by viewModel()
+    private lateinit var networkErrSb: Snackbar
 
     override fun initAfterBinding() {
         if (!::actionDialogFragment.isInitialized)
             initActionDialog()
+
+        settingVm.getNewNotice()
 
         initLoginStatus()
         setMyEventListener()
@@ -41,11 +50,14 @@ class SettingFragment : BaseFragment<FragmentSettingBinding>(FragmentSettingBind
         binding.settingPrivacyPolicyTv.paintFlags = Paint.UNDERLINE_TEXT_FLAG
         binding.settingTermsOfUserTv.paintFlags = Paint.UNDERLINE_TEXT_FLAG
         binding.settingLocationTermsOfServiceTv.paintFlags = Paint.UNDERLINE_TEXT_FLAG
+
+        //버전 정보 표시
+        val version = "버전 ${BuildConfig.VERSION_NAME}${getString(R.string.title_version_copyright)}"
+        binding.settingVersionTv.text = version
     }
 
     override fun onStart() {
         super.onStart()
-        settingVm.getNewNotice()
 
         //산책기록 잠금 상태
         when (getPWDstatus()) {
@@ -320,15 +332,11 @@ class SettingFragment : BaseFragment<FragmentSettingBinding>(FragmentSettingBind
 
             when (it) {
                 ErrorType.NETWORK -> {
-                    Snackbar.make(binding.root, getString(R.string.error_network), Snackbar.LENGTH_INDEFINITE).setAction(
-                        R.string.action_retry) {
-                            settingVm.getNewNotice()
-                    }.show()
+                    networkErrSb = Snackbar.make(binding.root, getString(R.string.error_network), Snackbar.LENGTH_INDEFINITE).setAction(R.string.action_retry) { settingVm.getNewNotice() }
                 }
-                else -> Snackbar.make(binding.root, getString(R.string.error_api_fail), Snackbar.LENGTH_INDEFINITE).setAction(
-                    R.string.action_retry) {
-                    settingVm.getNewNotice()
-                }.show()
+                ErrorType.UNKNOWN, ErrorType.DB_SERVER -> {
+                    startErrorActivity("SettingFragment")
+                }
             }
         })
 
@@ -379,5 +387,12 @@ class SettingFragment : BaseFragment<FragmentSettingBinding>(FragmentSettingBind
                     }
                 }
             }.show()
+    }
+
+    override fun onStop() {
+        super.onStop()
+
+        if (::networkErrSb.isInitialized && networkErrSb.isShown)
+            networkErrSb.dismiss()
     }
 }

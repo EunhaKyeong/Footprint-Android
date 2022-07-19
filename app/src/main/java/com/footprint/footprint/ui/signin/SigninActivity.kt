@@ -22,6 +22,7 @@ import com.google.android.gms.tasks.Task
 import com.footprint.footprint.R
 import com.footprint.footprint.domain.model.SocialUserModel
 import com.footprint.footprint.ui.agree.AgreeActivity
+import com.footprint.footprint.ui.error.ErrorActivity
 import com.footprint.footprint.utils.*
 import com.footprint.footprint.viewmodel.SignInViewModel
 import com.google.android.gms.auth.api.signin.*
@@ -32,10 +33,12 @@ import org.koin.androidx.viewmodel.ext.android.viewModel
 class SigninActivity : BaseActivity<ActivitySigninBinding>(ActivitySigninBinding::inflate){
 
     private val signInVm: SignInViewModel by viewModel()
+    private lateinit var socialUserModel: SocialUserModel
+
+    private lateinit var networkErrSb: Snackbar
 
     lateinit var mGoogleSignInClient: GoogleSignInClient
-    private lateinit var getResult: ActivityResultLauncher<Intent>
-    private lateinit var socialUserModel: SocialUserModel
+    private lateinit var getGoogleResult: ActivityResultLauncher<Intent>
 
     private var doubleBackToExit = false //뒤로가기 두 번 눌러야 종료 확인하는 변수
 
@@ -52,15 +55,8 @@ class SigninActivity : BaseActivity<ActivitySigninBinding>(ActivitySigninBinding
 
         //구글 로그인
         binding.signinGoogleloginBtnLayout.setOnClickListener {
-            getResult.launch(mGoogleSignInClient.signInIntent)
+            getGoogleResult.launch(mGoogleSignInClient.signInIntent)
         }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        //구글 로그인 API Result 처리 부분
-        googleClient()
     }
 
     /*Funtion-Kakao*/
@@ -128,13 +124,13 @@ class SigninActivity : BaseActivity<ActivitySigninBinding>(ActivitySigninBinding
     }
 
     /*Function - Google*/
-    private fun googleClient(){
+    private fun initGoogleResult(){
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestIdToken(BuildConfig.google_login_server_id)
             .requestEmail()
             .build()
         mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
-        getResult = registerForActivityResult(
+        getGoogleResult = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { result: ActivityResult ->
 
@@ -178,7 +174,6 @@ class SigninActivity : BaseActivity<ActivitySigninBinding>(ActivitySigninBinding
 
     /*로그인 API*/
     private fun callSignInAPI(){
-        //AuthService.login(this, socialUserModel)
         signInVm.login(socialUserModel)
     }
 
@@ -199,42 +194,26 @@ class SigninActivity : BaseActivity<ActivitySigninBinding>(ActivitySigninBinding
 
     /*에러 체크*/
     private fun signinErrorCheck(type: String){
-        val text = if(!isNetworkAvailable(this)){ //네트워크 에러
-            getString(R.string.error_network)
-        }else{ //나머지
-            getString(R.string.error_api_fail)
-        }
 
-        Snackbar.make(binding.root, text, Snackbar.LENGTH_INDEFINITE).setAction(getString(R.string.action_retry)) {
+        if(!isNetworkAvailable(this)){ //네트워크 에러
+            networkErrSb = Snackbar.make(binding.root, getString(R.string.error_network), Snackbar.LENGTH_INDEFINITE)
             when(type){
                 "KAKAO" -> {
-                    setKakaoLogin()
+                    networkErrSb.setAction(getString(R.string.action_retry)) { setKakaoLogin() }
                 }
                 "GOOGLE" -> {
-                    getResult.launch(mGoogleSignInClient.signInIntent)
+                    networkErrSb.setAction(getString(R.string.action_retry)) { getGoogleResult.launch(mGoogleSignInClient.signInIntent) }
                 }
                 "LOGIN" -> {
-                    signInVm.login(socialUserModel)
+                    networkErrSb.setAction(getString(R.string.action_retry)) { signInVm.login(socialUserModel) }
                 }
             }
-        }.show()
-    }
 
-    /*백버튼 처리: 두 번 누르면 앱 종료*/
-    override fun onBackPressed() {
-        if (doubleBackToExit) {
-            finishAffinity()
-        } else {
-            Toast.makeText(this, "종료하려면 뒤로가기를 한번 더 눌러주세요.", Toast.LENGTH_SHORT).show()
-            doubleBackToExit = true
-            runDelayed(1500L) {
-                doubleBackToExit = false
-            }
+            networkErrSb.show()
+        }else{ /* UNKNOWN, DB_SERVER */
+            startErrorActivity("SignInActivity")
         }
-    }
 
-    private fun runDelayed(millis: Long, function: () -> Unit) {
-        Handler(Looper.getMainLooper()).postDelayed(function, millis)
     }
 
     /*Observe*/
@@ -262,5 +241,37 @@ class SigninActivity : BaseActivity<ActivitySigninBinding>(ActivitySigninBinding
             }
         })
     }
+
+    /*백버튼 처리: 두 번 누르면 앱 종료*/
+    override fun onBackPressed() {
+        if (doubleBackToExit) {
+            finishAffinity()
+        } else {
+            Toast.makeText(this, "종료하려면 뒤로가기를 한번 더 눌러주세요.", Toast.LENGTH_SHORT).show()
+            doubleBackToExit = true
+            runDelayed(1500L) {
+                doubleBackToExit = false
+            }
+        }
+    }
+
+    private fun runDelayed(millis: Long, function: () -> Unit) {
+        Handler(Looper.getMainLooper()).postDelayed(function, millis)
+    }
+
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        initGoogleResult()
+    }
+
+    override fun onStop() {
+        super.onStop()
+
+        if (::networkErrSb.isInitialized && networkErrSb.isShown)
+            networkErrSb.dismiss()
+    }
+
 
 }

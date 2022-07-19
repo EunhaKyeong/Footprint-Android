@@ -2,9 +2,9 @@ package com.footprint.footprint.ui.walk
 
 import android.os.Bundle
 import android.view.View
+import androidx.annotation.UiThread
 import androidx.lifecycle.Observer
 import androidx.navigation.navArgs
-import com.bumptech.glide.Glide
 import com.footprint.footprint.R
 import com.footprint.footprint.databinding.ActivityWalkDetailBinding
 import com.footprint.footprint.domain.model.GetWalkEntity
@@ -13,20 +13,26 @@ import com.footprint.footprint.ui.adapter.FootprintRVAdapter
 import com.footprint.footprint.ui.dialog.ActionDialogFragment
 import com.footprint.footprint.ui.dialog.FootprintDialogFragment
 import com.footprint.footprint.ui.dialog.MsgDialogFragment
-import com.footprint.footprint.data.dto.FootprintRequestDTO
 import com.footprint.footprint.domain.model.GetFootprintEntity
 import com.footprint.footprint.domain.model.SaveWalkFootprintEntity
+import com.footprint.footprint.utils.*
 import com.footprint.footprint.utils.ErrorType
 import com.footprint.footprint.utils.convertDpToPx
 import com.footprint.footprint.utils.getDeviceHeight
 import com.footprint.footprint.viewmodel.WalkViewModel
 import com.google.android.material.snackbar.Snackbar
 import com.google.gson.Gson
+import com.naver.maps.geometry.LatLng
+import com.naver.maps.map.MapFragment
+import com.naver.maps.map.NaverMap
+import com.naver.maps.map.NaverMapOptions
+import com.naver.maps.map.OnMapReadyCallback
 import com.sothree.slidinguppanel.SlidingUpPanelLayout
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class WalkDetailActivity :
-    BaseActivity<ActivityWalkDetailBinding>(ActivityWalkDetailBinding::inflate) {
+    BaseActivity<ActivityWalkDetailBinding>(ActivityWalkDetailBinding::inflate),
+    OnMapReadyCallback {
     private lateinit var actionDialogFragment: ActionDialogFragment
     private lateinit var footprintDialogFragment: FootprintDialogFragment
     private lateinit var footprintRVAdapter: FootprintRVAdapter
@@ -37,6 +43,9 @@ class WalkDetailActivity :
 
     private var tempUpdateFootprintPosition: Int? = null    //수정하고자 하는 발자국의 RV 어댑터 위치
     private var tempUpdateSaveWalkFootprint: GetFootprintEntity? = null  //수정하고자 하는 발자국 데이터
+
+    private lateinit var paths: MutableList<MutableList<LatLng>> // 지도에 표시할 경로
+    private lateinit var footprints: List<List<Double>>
 
     override fun initAfterBinding() {
         observe()
@@ -109,25 +118,28 @@ class WalkDetailActivity :
             }
 
             override fun sendUpdatedFootprint(saveWalkFootprint: SaveWalkFootprintEntity) {
+            }
+
+            override fun sendUpdatedFootprint(getFootprintEntity: GetFootprintEntity) {
                 //수정된 데이터만 모아서 요청하기
                 val reqMap: HashMap<String, Any> = HashMap()
 
-                if (saveWalkFootprint.write != tempUpdateSaveWalkFootprint!!.write)   //글
-                    reqMap["write"] = saveWalkFootprint.write
+                if (getFootprintEntity.write != tempUpdateSaveWalkFootprint!!.write)   //글
+                    reqMap["write"] = getFootprintEntity.write
 
-                if (saveWalkFootprint.hashtagList != tempUpdateSaveWalkFootprint!!.tagList) { //해시태그
-                    if (saveWalkFootprint.hashtagList!!.isEmpty()) {    //해시태그를 모두 삭제한 경우
+                if (getFootprintEntity.tagList != tempUpdateSaveWalkFootprint!!.tagList) { //해시태그
+                    if (getFootprintEntity.tagList!!.isEmpty()) {    //해시태그를 모두 삭제한 경우
                         reqMap["tagList"] = ""
                     } else {    //해시 태그를 모두 삭제하지 않은 경우
-                        for (i in saveWalkFootprint.hashtagList!!.indices) {
-                            reqMap["tagList[$i]"] = saveWalkFootprint.hashtagList!![i]
+                        for (i in getFootprintEntity.tagList!!.indices) {
+                            reqMap["tagList[$i]"] = getFootprintEntity.tagList!![i]
                         }
                     }
                 }
 
                 var photos: List<String>? = null    //사진 -> 수정된 사진이 없으면 null
-                if (saveWalkFootprint.photos != tempUpdateSaveWalkFootprint!!.photoList) {
-                    photos = saveWalkFootprint.photos
+                if (getFootprintEntity.photoList != tempUpdateSaveWalkFootprint!!.photoList) {
+                    photos = getFootprintEntity.photoList
                 }
 
                 if (reqMap.isEmpty() && photos==null) //변경된 내용 없음 -> "변경된 내용이 없어요" 다이얼로그 띄우기
@@ -152,7 +164,6 @@ class WalkDetailActivity :
         binding.walkDetailCalorieTv.text = getWalkEntity.calorie.toString()  //산책하는 동안 소모된 칼로리
         binding.walkDetailDistanceTv.text = getWalkEntity.distance.toString()    //산책 거리
         binding.walkDetailRecordTv.text = getWalkEntity.footCount.toString() //발자국 횟수
-        Glide.with(this).load(getWalkEntity.pathImageUrl).into(binding.walkDetailMapIv)  //산책 동선 이미지
 
         if (getWalkEntity.footCount==0) {   //남긴 발자국이 없으면 -> 산책기록이 없어요! 화면 보여주기
             binding.walkDetailLoadingPb.visibility = View.INVISIBLE   //로딩 프로그래스바 INVISIBLE
@@ -179,17 +190,9 @@ class WalkDetailActivity :
                 tempUpdateFootprintPosition = position
                 tempUpdateSaveWalkFootprint = saveWalkFootprint
 
-                //발자국 데이터와 함께 FootprintDialogFragment 호출 -> FootprintDialogFragment 에 보내려면 Footprint -> FootprintModel 로 형 변환 필요
-                val footprintModel = FootprintRequestDTO(
-                    recordAt = saveWalkFootprint.recordAt,
-                    write = saveWalkFootprint.write,
-                    hashtagList = saveWalkFootprint.tagList,
-                    photos = saveWalkFootprint.photoList as ArrayList,
-                    onWalk = saveWalkFootprint.onWalk
-                )
-
                 val bundle: Bundle = Bundle()
-                bundle.putString("footprint", Gson().toJson(footprintModel))
+                bundle.putString("footprint", Gson().toJson(saveWalkFootprint))
+                bundle.putBoolean("isSaved", true) //이전에 저장됐던 발자국인지 보내주기 -> 저장했던 발자국을 수정할 거니까 true
                 footprintDialogFragment.arguments = bundle
                 footprintDialogFragment.show(supportFragmentManager, null)
             }
@@ -216,8 +219,7 @@ class WalkDetailActivity :
                     networkErrSb.show()
                 }
                 ErrorType.UNKNOWN, ErrorType.DB_SERVER -> {
-                    showToast(getString(R.string.error_sorry))
-                    onBackPressed()
+                    startErrorActivity("WalkDetailActivity")
                 }
             }
         })
@@ -225,6 +227,9 @@ class WalkDetailActivity :
         //산책 기록 observe
         walkVm.getWalkEntity.observe(this, Observer {
             bindWalkInfo(it)    //데이터 바인딩
+            paths = it.coordinate
+            footprints = it.footCoordinates
+            initWalkDetailMap()     // 지도 호출
         })
 
         walkVm.footprints.observe(this, Observer {
@@ -260,5 +265,29 @@ class WalkDetailActivity :
         walkVm.isDelete.observe(this, Observer {
             finish()
         })
+    }
+
+    private fun initWalkDetailMap() {
+        val options = NaverMapOptions()
+            .compassEnabled(false)
+
+        val mapFragment =
+            supportFragmentManager.findFragmentById(R.id.walk_detail_map_fragment) as MapFragment?
+                ?: MapFragment.newInstance(options).also {
+                    supportFragmentManager.beginTransaction().add(R.id.walk_detail_map_fragment, it)
+                        .commit()
+                }
+
+        // 지도 비동기 호출
+        mapFragment.getMapAsync(this)
+    }
+
+    @UiThread
+    override fun onMapReady(naverMap: NaverMap) {
+        moveMapCamera(paths, naverMap)
+
+        drawWalkPath(paths, this, naverMap)
+
+        drawFootprints(footprints, naverMap)
     }
 }

@@ -4,12 +4,13 @@ import com.footprint.footprint.data.dto.FootprintModel
 import com.footprint.footprint.data.dto.GetFootprintDTO
 import com.footprint.footprint.domain.model.GetFootprintEntity
 import com.footprint.footprint.domain.model.SaveWalkFootprintEntity
+import com.naver.maps.geometry.LatLng
 
 object FootprintMapper {
     fun mapperToFootprintModel(saveWalkFootprintEntity: SaveWalkFootprintEntity): FootprintModel =
         saveWalkFootprintEntity.run {
             FootprintModel(
-                coordinates,
+                convertFootprintCoordinates(coordinates),
                 recordAt,
                 write,
                 hashtagList,
@@ -23,17 +24,23 @@ object FootprintMapper {
         var footprintImgIdx: Int = 0
 
         for (getFootprintModel in getFootprintDTOList) {
-            getFootprintEntityList.add(GetFootprintEntity(
-                footprintIdx = getFootprintModel.footprintIdx,
-                recordAt = getFootprintModel.recordAt,
-                write = getFootprintModel.write,
-                photoList = getFootprintModel.photoList,
-                tagList = getFootprintModel.tagList,
-                onWalk = getFootprintModel.onWalk,
-                footprintImgIdx = if (getFootprintModel.onWalk==1) footprintImgIdx++ else null
-            ))
+            getFootprintEntityList.add(
+                GetFootprintEntity(
+                    footprintIdx = getFootprintModel.footprintIdx,
+                    recordAt = getFootprintModel.recordAt,
+                    write = getFootprintModel.write,
+                    photoList = getFootprintModel.photoList,
+                    tagList = getFootprintModel.tagList,
+                    onWalk = getFootprintModel.onWalk,
+                    footprintImgIdx = if (getFootprintModel.onWalk == 1) footprintImgIdx++ else null
+                )
+            )
         }
 
         return getFootprintEntityList
+    }
+
+     fun convertFootprintCoordinates(coordinate: LatLng?): List<Double> {
+        return coordinate?.let { listOf(coordinate.latitude, coordinate.longitude) } ?: listOf()
     }
 }
